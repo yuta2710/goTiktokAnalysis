@@ -1,0 +1,12 @@
+server:
+  port: 8080
+  
+db:
+  host: db  
+  port: 5432
+  user: postgres
+  password: 123456
+  dbname: gotikdb
+  sslmode: disable
+  timezone: Asia/Bangkok
+
