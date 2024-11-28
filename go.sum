@@ -1,3 +1,5 @@
+github.com/DataDog/go-python3 v0.0.0-20211102160307-40adc605f1fe h1:bNMi0HArOQY4899TKLi4RP7g9BZ2kwLOiVpoJHWxyFs=
+github.com/DataDog/go-python3 v0.0.0-20211102160307-40adc605f1fe/go.mod h1:7ctnOCLiUlwKO9GvAjusUF68edSbiHqC18gVPQF0ojA=
 github.com/aead/siphash v1.0.1/go.mod h1:Nywa3cDsYNNK3gaciGTWPwHt0wlpNV15vwmswBAUSII=
 github.com/btcsuite/btcd v0.20.1-beta/go.mod h1:wVuoA8VJLEcwgqHBwHmzLRazpKxTv13Px/pDuV7OomQ=
 github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f/go.mod h1:TdznJufoqS23FtqVCzL0ZqgP5MqXbb4fg/WgDys70nA=

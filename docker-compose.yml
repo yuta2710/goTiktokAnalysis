@@ -24,6 +24,7 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data # Persist PostgreSQL
     # command: --default-authentication-plugin=mysql_native_password
+    
   api:
     container_name: "gotik_api"
     # we want to use the image which is build from our Dockerfile
@@ -50,7 +51,9 @@ services:
     depends_on:
       - db
     volumes:
-      - .:/python-scripts/app # Mount the folder containing your Python scripts
+      - ./scripts:/code # Mount the folder containing your Python scripts
+    ports:
+      - "8000:8000"
     networks:
       - default
 

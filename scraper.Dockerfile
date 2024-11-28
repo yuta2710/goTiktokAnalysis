@@ -1,23 +1,11 @@
-FROM python:3.12-bookworm
-# Set working directory
-WORKDIR /app
+FROM python:3.9
 
-# RUN apt-get update && apt-get add gcompat
+WORKDIR /code
 
-RUN python -m venv /app/venv
+COPY ./requirements.txt /code/requirements.txt
 
-# Install Python dependencies
-RUN . /app/venv/bin/activate && pip install --upgrade pip && pip install tiktok_captcha_solver 
+RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
 
-RUN pip install --upgrade pip && pip install playwright && \
-    playwright install --with-deps
-RUN . /app/venv/bin/activate && pip install pytest-playwright
+COPY ./scripts /code/
 
-# # Cài đặt các trình duyệt cho Playwright (nếu cần)
-# RUN . /app/venv/bin/activate && playwright install
-
-# Copy source code
-COPY . .
-
-# Run the Python script (adjust command as needed)
-# CMD ["/app/venv/bin/python", "scripts/analysis.py"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

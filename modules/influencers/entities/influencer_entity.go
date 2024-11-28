@@ -16,3 +16,5 @@ type Influencer struct {
 	TotalViewCount  int    `gorm:"column:total_view_count" json:"totalViewCount`
 	Country         string `gorm:"column:country" json:"country"`
 }
+
+// Forked https://github.com/kluctl/go-embed-python

@@ -1,45 +1,9 @@
-# FROM golang:1.23.3-alpine as builder
-# # RUN mkdir /app 
-# # ADD . /app 
-# WORKDIR /app 
-
-# RUN apk update && apk add python3=3.11.5-r0 py3-pip && ln -sf python3 /usr/bin/python && apk add libc-dev && apk add gcc && apk add make  && apk add py3-pip && apk add libx11 && apk add libxcomposite && apk add libxdamage && apk add libxrandr && apk add libxi && apk add libxtst && apk add libxshmfence && apk add mesa-gl && apk add alsa-lib && apk add ttf-freefont
-# # Tạo virtual environment
-# RUN python3 -m venv /app/venv
-
-# # Kích hoạt venv và cài đặt các package Python cần thiết
-# RUN . /app/venv/bin/activate && pip install --upgrade pip && pip install tiktok_captcha_solver
-# RUN . /app/venv/bin/activate && pip install --upgrade pip && pip install playwright
-# RUN . /app/venv/bin/activate && pip install --upgrade pip && pip install pytest-playwright
-
-# # # Cài đặt các trình duyệt cho Playwright (nếu cần)
-# RUN . /app/venv/bin/activate && playwright install
-
-# # Thêm venv vào PATH để các lệnh Python sử dụng venv
-# ENV PATH="/app/venv/bin:$PATH"
-
-# COPY go.mod go.sum ./
-# RUN go mod download && go mod verify
-
-# # Install compile daemon 
-# # RUN go install github.com/githubnemo/CompileDaemon@latest
-# RUN go install github.com/air-verse/air@latest
-
-# COPY . .
-# # CMD [ "air" ]
-# COPY ./entrypoint.sh /entrypoint.sh 
-
-# ADD https://raw.githubusercontent.com/eficode/wait-for/v2.1.0/wait-for /usr/local/bin/wait-for
-# RUN chmod +rx /usr/local/bin/wait-for /entrypoint.sh
-
-# ENTRYPOINT [ "sh", "/entrypoint.sh" ]
-
 FROM golang:1.23.3-alpine as builder
-# RUN mkdir /app 
-# ADD . /app 
+
 WORKDIR /app 
 
 RUN apk update && apk add libc-dev && apk add gcc && apk add make 
+
 COPY go.mod go.sum ./
 RUN go mod download && go mod verify
 
@@ -50,6 +14,8 @@ RUN go install github.com/air-verse/air@latest
 COPY . .
 # CMD [ "air" ]
 COPY ./entrypoint.sh /entrypoint.sh 
+COPY ./exec.sh /exec.sh 
+RUN chmod +x /app/exec.sh
 
 ADD https://raw.githubusercontent.com/eficode/wait-for/v2.1.0/wait-for /usr/local/bin/wait-for
 RUN chmod +rx /usr/local/bin/wait-for /entrypoint.sh

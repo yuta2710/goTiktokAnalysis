@@ -11,6 +11,7 @@ require (
 )
 
 require (
+	github.com/DataDog/go-python3 v0.0.0-20211102160307-40adc605f1fe // indirect
 	github.com/btcsuite/btcutil v1.0.2 // indirect
 	github.com/fatih/color v1.14.1 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
