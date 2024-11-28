@@ -1,6 +1,6 @@
-# tiktok_captcha_solver
-# playwright
-# playwright-stealth
+tiktok_captcha_solver
+playwright
+playwright-stealth
 fastapi[standard]>=0.113.0,<0.114.0
 pydantic>=2.7.0,<3.0.0
 pydantic-settings
