@@ -61,6 +61,7 @@ func TokenProvider(userId int, authId string) (string, string, error) {
 		"authId": authId,
 		"exp":    time.Now().Add(7 * 24 * time.Hour).Unix(),
 	})
+
 	refreshSecret := os.Getenv("REFRESH_SECRET")
 	refreshTokenString, err := refreshToken.SignedString([]byte(refreshSecret))
 

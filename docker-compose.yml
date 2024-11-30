@@ -1,6 +1,16 @@
 version: '3.7'
 
 services:
+  cassandra: 
+    image: cassandra:latest 
+    container_name: tiktok_cassandra
+    ports:
+      - "9042:9042"
+    environment:
+      - CASSANDRA_USER=admin
+      - CASSANDRA_PASSWORD=admin
+    volumes:
+      - cassandra-data:/var/lib/cassandra
   db:
     platform: linux/x86_64
     container_name: "gotik_db"
@@ -61,3 +71,4 @@ networks:
   default:
 volumes:
   postgres-data:
+  cassandra-data:

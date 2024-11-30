@@ -7,8 +7,9 @@ COPY ./requirements.txt /code/requirements.txt
 RUN pip install --upgrade pip 
 RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
 RUN playwright install --with-deps
+# RUN apt-get update && apt-get install xvfb
 
-RUN apt-get update && apt-get install xvfb
+# ENV DISPLAY=:99
 
 COPY ./scripts /code/
 
