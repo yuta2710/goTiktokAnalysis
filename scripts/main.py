@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from common import parse_formatted_number
@@ -9,6 +9,8 @@ from playwright.async_api import async_playwright
 from playwright_stealth import StealthConfig, stealth_async
 from typing import List
 
+from datetime import datetime, timedelta
+import re
 
 import os
 import re 
@@ -16,6 +18,35 @@ import time
 import uuid
 
 load_dotenv(".env")
+
+def convert_to_datetime(time_str: str) -> datetime:
+    """
+    Convert a relative time string like '1d ago', '4h ago', or '4m ago' to a datetime object.
+    """
+    # Get current time 
+    now = datetime.now()
+
+    # Using regex to analyze the 
+    match = re.match(r"(\d+)([dhm]) ago", time_str)
+    if not match:
+        raise ValueError(f"Invalid time string format: {time_str}")
+
+    # Analyze the string syntax 
+    value, unit = match.groups()
+    value = int(value)
+
+    # Conver to time delta based on their unit 
+    if unit == "d":  # days
+        delta = timedelta(days=value)
+    elif unit == "h":  # hours
+        delta = timedelta(hours=value)
+    elif unit == "m":  # minutes
+        delta = timedelta(minutes=value)
+    else:
+        raise ValueError(f"Unsupported time unit: {unit}")
+
+    # minus the time from the current time 
+    return now - delta
 
 class bcolors:
     HEADER = "\033[95m"
@@ -54,26 +85,54 @@ class CommentItem(BaseModel):
     content: str 
     full_name: str  
     avatar: str
-    # likes_count: str  
-    # comments_count: str  
-    # saved_count: str 
-    # shared_count: str  
-    # date_posted: str  
-    
+    date_posted: datetime  
+
+    @validator("date_posted", pre=True)
+    def parse_date_posted(cls, v):
+        if isinstance(v, str):
+            try:
+                return datetime.strptime(v, "%d-%m-%Y")
+            except Exception as e:
+                raise ValueError(f"Invalid date format: {v}. Expected format: 'd-m-Y'.")
+        
+        return v 
+
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
+        
     def __hash__(self):
         # Create hashing based on important properties 
         return hash((self.username, self.content, self.avatar))
-    
+
+
 class PostItem(BaseModel):
     username: str 
     content: str
     hashtags: List[str]
+    view_count: str 
     likes_count: str 
     comments_count: str 
     saved_count: str
     shared_count: str
+    date_posted: datetime 
     comments: List[CommentItem]  
-    # date_posted: str 
+    
+    @validator("date_posted", pre=True)
+    def parse_date_posted(cls, v):
+        if isinstance(v, str):
+            try:
+                return datetime.strptime(v, "%d-%m-%Y")
+            except Exception as e:
+                raise ValueError(f"Invalid date format: {v}. Expected format: 'd-m-Y'.")
+        
+        return v 
+
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
     
     def __hash__(self) -> int:
         return hash((self.content))
@@ -86,7 +145,8 @@ class ScrapePostsRequest(BaseModel):
     number_of_posts: int 
     
 class ScrapePostDetailRequest(BaseModel):
-    url: str 
+    url: str
+    limit: int 
 
 @app.post("/scrape")
 async def scrapeInfluencerProfile(body: ScrapeProfileRequest):
@@ -258,11 +318,11 @@ async def scrapeInfluencerProfile(body: ScrapeProfileRequest):
         "data": profile_data
     }
      
-     
 @app.post("/scrape/video/{video_id}")
 async def scrapeInfluencerDetailsOfPost(video_id: int, body: ScrapePostDetailRequest):
     api_key = os.getenv("SCAPTCHA_API_KEY")
     tiktok_url = body.url
+    limit = body.limit
 
     if "DISPLAY" not in os.environ:
         os.environ["DISPLAY"] = ":99"
@@ -303,25 +363,13 @@ async def scrapeInfluencerDetailsOfPost(video_id: int, body: ScrapePostDetailReq
         # Infinite scroll logic
         max_scroll_attempts = 30  # Limit the maximum number of scroll attempts
         scroll_pause_time = 3  # Pause time between scrolls
-
-        total_comments_scraped = 0  # Track total posts scraped
-        empty_attempts = 0  # Counter for attempts where no posts are found
-
-        # raw_description = page.locator("span.css-j2a19r-SpanText.efbd9f0").text_content()
-        likes_count = 0 
-        comments_count = 0 
-        saved_count = 0 
-        shared_count = 0 
-        raw_description = ""
-        raw_test_description = ""  
         
         preprocessed_description = ""
         prev_container_text = ""
         
         prev_comments_count = 0 
         retry_count = 0  # To handle retries when no new comments are loaded
-        MAX_RETRIES = 6  # Maximum retries before stopping the scroll
-        # total_comment_loaded = 0 
+        MAX_RETRIES = 3  # Maximum retries before stopping the scroll
 
         try:
             # Wait for the parent locator containing the spans
@@ -337,6 +385,38 @@ async def scrapeInfluencerDetailsOfPost(video_id: int, body: ScrapePostDetailReq
         except Exception as e:
             print(f"Error processing description: {e}")
 
+        influencer_username = await page.locator("span[data-e2e='browse-username']").text_content()  
+              
+        video_date_posted_locator = await page.locator("span[data-e2e='browser-nickname'] span").all()
+        video_date_posted_text = ""
+        
+        if video_date_posted_locator:
+            date_posted_text = await video_date_posted_locator[2].text_content()
+            if date_posted_text:
+                video_date_posted_text = date_posted_text
+                
+                if "ago" in video_date_posted_text:
+                    video_date_posted_text = convert_to_datetime(video_date_posted_text)
+                    
+                elif "-" in date_posted_text:
+                    video_date_arr = date_posted_text.split("-")
+                    
+                    if len(video_date_arr) == 2:
+                        video_date_arr.reverse() # Reverse the [month, day] to [day, month]
+                        video_date_arr.append(2024)
+                        video_date_posted_text = "-".join(map(str, video_date_arr))
+                    elif len(video_date_arr) == 3:  # Trường hợp đã có day, month, year
+                        video_date_arr.reverse()
+                        video_date_posted_text = "-".join(map(str, video_date_arr))
+                            
+                        print("Date already contains year, no need to append 2024.")
+                    else:
+                        print("Invalid date format detected!")
+                
+        
+            # print(f"video_date_posted_text1: {video_date_posted_text1} video_date_posted_text2: {video_date_posted_text2} video_date_posted_text3: {video_date_posted_text3}")
+        print(f"\nVideo post on {video_date_posted_text}")
+        
         raw_likes_count = await page.locator("strong[data-e2e='like-count']").text_content()
         raw_comments_count = await page.locator("strong[data-e2e='comment-count']").text_content()
         raw_saved_count = await page.locator("strong[data-e2e='undefined-count']").text_content()
@@ -346,47 +426,40 @@ async def scrapeInfluencerDetailsOfPost(video_id: int, body: ScrapePostDetailReq
         try:
             raw_hashtags = await page.locator("a[data-e2e='search-common-link']").all()
         
-            if raw_hashtags is not None:
+            if raw_hashtags:
                 for raw_hashtag in raw_hashtags:
                     hashtag_text = await raw_hashtag.locator("strong").text_content()
-                    if hashtag_text is not None:
+                    if hashtag_text:
                         hashtags.append(hashtag_text)
         except Exception as e:
             print("\nError scrape hashtags")
         
-        print(f"\nInformation of post {video_id}")
-        print(raw_description)
-        print(preprocessed_description)
-        print(hashtags)
-        print(raw_comments_count)
-        print(raw_saved_count)
-        print(raw_shared_count)
         
-        limit_comments = int(raw_comments_count.strip())
+        if "K" or "M" in raw_comments_count:
+            limit_comments = parse_formatted_number(raw_comments_count)
+        else:
+            limit_comments = int(raw_comments_count.strip())
         
         print(f"\n\nWe've {limit_comments} comments of this post")
         
         comments_data = set()  # Track unique posts already scraped
         comments_list = set()  # Track unique posts already scraped
-        processed_subcontents = set()
         
         detect_comment_size = 0 
 
-        # Close the browser after operation (optional)
-        # browser.close()
 
         for _ in range(max_scroll_attempts):
             try:
-                if detect_comment_size >= limit_comments:
+                if detect_comment_size >= limit:
                     print(f"\nScraping limit of {limit_comments} posts reached. Stopping.")
                     break
                 
                 current_scroll_height = await page.evaluate("document.body.scrollHeight")
-                # await page.wait_for_timeout(8000)
+                await page.wait_for_timeout(5000)
                 
                 # Scroll to the bottom of the page
                 await page.evaluate("window.scrollBy(0, document.body.scrollHeight)")
-                await page.wait_for_timeout(5000)  # Allow time for content to load
+                await page.wait_for_timeout(8000)  # Allow time for content to load
                 
                 
                 new_scroll_height = await page.evaluate("document.body.scrollHeight")
@@ -396,21 +469,22 @@ async def scrapeInfluencerDetailsOfPost(video_id: int, body: ScrapePostDetailReq
                 # Locate the container for comments
                 container = page.locator("div.css-7whb78-DivCommentListContainer.ezgpko40")
                 containerText = await page.locator("div.css-7whb78-DivCommentListContainer.ezgpko40").text_content()
-                # Kiểm tra nếu container không thay đổi (không có dữ liệu mới)
+                
                 if containerText == prev_container_text:
                     retry_count += 1
                     print(f"No new comments loaded. Retry {retry_count}/{MAX_RETRIES}")
-                    if retry_count >= MAX_RETRIES:
+                    if retry_count >= MAX_RETRIES: 
                         print("Maximum retries reached. Stopping scroll.")
                         break
                 else:
                     retry_count = 0  # Reset retry if there is new data 
+                    
                 prev_container_text = containerText
                         
                 # Ensure comments are loaded
                 page.locator(
                     "div.css-13wx63w-DivCommentObjectWrapper.ezgpko42"
-                ).wait_for(timeout=10000)
+                ).wait_for(timeout=10000) 
                 
                 # Extract the comment items
                 comment_items = await container.locator(
@@ -437,7 +511,7 @@ async def scrapeInfluencerDetailsOfPost(video_id: int, body: ScrapePostDetailReq
                 new_comments_added = 0
 
                 for cmt_item in comment_items:
-                    if total_comments_scraped >= limit_comments:
+                    if detect_comment_size >= limit:
                         break
                     
                     try:
@@ -456,21 +530,53 @@ async def scrapeInfluencerDetailsOfPost(video_id: int, body: ScrapePostDetailReq
                         try:
                             cmt_user_avatar = cmt_item.locator("div.css-vc6h98-DivAvatarWrapper.e1970p9w1 img.css-1zpj2q-ImgAvatar.e1e9er4e1").first
                             cmt_user_avatar_src = await cmt_user_avatar.get_attribute("src")
+                            
+                            cmt_subcontent = cmt_item.locator("div.css-1k8xzzl-DivCommentContentWrapper.e1970p9w2 div.css-njhskk-DivCommentSubContentWrapper.e1970p9w6")
+                            date_posted_locator = await cmt_subcontent.locator("span").all()
+
+                            if date_posted_locator:  # Kiểm tra nếu danh sách không rỗng
+                                date_posted_text = await date_posted_locator[0].text_content()  # Lấy text content của phần tử đầu tiên
+                                print(f"Raw comment date posted: {date_posted_text}")
+                                
+                                if "ago" in date_posted_text:
+                                    date_posted_text = convert_to_datetime(date_posted_text)
+                                    print(f"Preprocessed comment date posted: {date_posted_text}")
+                                    
+                                elif "-" in date_posted_text:
+                                    date_arr = date_posted_text.split("-")
+                                    
+                                    print("\nData of date list")
+                                    print(date_arr)
+                                    if len(date_arr) == 2:
+                                        date_arr.reverse() # Reverse the [month, day] to [day, month]
+                                        date_arr.append(2024)
+                                        date_posted_text = "-".join(map(str, date_arr))
+                                    elif len(date_arr) == 3:  # Trường hợp đã có day, month, year
+                                        date_arr.reverse()
+                                        date_posted_text = "-".join(map(str, date_arr))
+                                         
+                                        print("Date already contains year, no need to append 2024.")
+                                    else:
+                                        print("Invalid date format detected!")
+                                
+                                print(f"Date posted text: {date_posted_text}")
+                                
+                                if date_posted_text:
+                                    cmt_date_posted = date_posted_text
+                            else:
+                                print("No elements found.")
+                            
                         except Exception as e:
                                 print("\nError processing avatar of user commentator")
                             
                         unique_key = f"{cmt_username}-{cmt_content}"
                         
                         comment_item_obj = CommentItem(
-                            username=cmt_username,
-                            content=cmt_content,
-                            full_name=cmt_fullname,
+                            username=cmt_username.strip(),
+                            content=cmt_content.capitalize().strip(),
+                            full_name=cmt_fullname.title(),
                             avatar=cmt_user_avatar_src,
-                            # likes_count=raw_likes_count,
-                            # comments_count=raw_comments_count,
-                            # saved_count=raw_saved_count,
-                            # shared_count=raw_shared_count,
-                            # date_posted=cmt_date_posted
+                            date_posted=cmt_date_posted
                         )
                         
                         if unique_key not in comments_data:
@@ -502,24 +608,48 @@ async def scrapeInfluencerDetailsOfPost(video_id: int, body: ScrapePostDetailReq
 
             except Exception as e:
                 print(f"Error processing comments: {e}")
-        await browser.close()
+
         
         print(f"\n\n\nScraped successfully {len(comments_data)}")
+        
+        view_count_text = ""
+        # influencer_profile_url = tiktok_url.replace(f"/video/{video_id}", "")
+        # print(f"\nInfluencer profile url: {influencer_profile_url}")
+        
+        # await page.goto(influencer_profile_url)
+        
+        # await page.wait_for_timeout(3000)  # Allow time for content to load
+        
+        # view_count_locator = page.locator(f"a[href*='@{influencer_username}/video/{video_id}'] strong[data-e2e='video-views']")
+        # if view_count_locator:
+        #     view_count_text = await view_count_locator.text_content()
+        
+        # print(f"View count text finally is {view_count_text}")
+        
+        await browser.close()
+        
+        # Sorted the comment with latest days 
+        # comments_list = sorted(comments_list, key=lambda x: x.date_posted, reverse=True)
+        
         post_data = PostItem(
-            username="louislonghoang",
+            username=influencer_username,
             content=preprocessed_description,
             hashtags=hashtags,
+            view_count=view_count_text,
             likes_count=raw_likes_count,
             comments_count=raw_comments_count,
             saved_count=raw_saved_count,
             shared_count=raw_shared_count,
-            comments=comments_list
+            date_posted=video_date_posted_text,
+            comments=comments_list,
         )
+        
+        
         
         return {
             "success": True,
-            "message": "Scrape profile successfully",
-            "count": len(comments_list),
+            "message": f"[DONE]: We've scraped video {video_id} of user <{influencer_username}> successfully",
+            "number_of_comments": len(comments_list),
             "data": post_data
         }
 
